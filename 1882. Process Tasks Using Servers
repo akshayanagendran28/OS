@@ -1,0 +1,179 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+// Structure to represent a Server
+typedef struct {
+    int weight;
+    int index;
+    long long freeTime; // Used mainly for the busy heap
+} Server;
+
+// Structure for Min-Heap
+typedef struct {
+    Server* data;
+    int size;
+    int capacity;
+} MinHeap;
+
+// Initialize a Heap
+MinHeap* createHeap(int capacity) {
+    MinHeap* heap = (MinHeap*)malloc(sizeof(MinHeap));
+    heap->data = (Server*)malloc(sizeof(Server) * capacity);
+    heap->size = 0;
+    heap->capacity = capacity;
+    return heap;
+}
+
+void swap(Server* a, Server* b) {
+    Server temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// Compare function for free servers: priority = weight, then index
+int compareFree(Server a, Server b) {
+    if (a.weight != b.weight) {
+        return (a.weight > b.weight) - (a.weight < b.weight);
+    }
+    return (a.index > b.index) - (a.index < b.index);
+}
+
+// Compare function for busy servers: priority = freeTime
+int compareBusy(Server a, Server b) {
+    if (a.freeTime != b.freeTime) {
+        return (a.freeTime > b.freeTime) - (a.freeTime < b.freeTime);
+    }
+    // Ties technically follow free heap rules once popped, but ordering here keeps it clean
+    if (a.weight != b.weight) {
+        return (a.weight > b.weight) - (a.weight < b.weight);
+    }
+    return (a.index > b.index) - (a.index < b.index);
+}
+
+// Push to Free Heap
+void pushFree(MinHeap* heap, Server s) {
+    heap->data[heap->size] = s;
+    int i = heap->size++;
+    while (i > 0) {
+        int p = (i - 1) / 2;
+        if (compareFree(heap->data[i], heap->data[p]) < 0) {
+            swap(&heap->data[i], &heap->data[p]);
+            i = p;
+        } else {
+            break;
+        }
+    }
+}
+
+// Pop from Free Heap
+Server popFree(MinHeap* heap) {
+    Server top = heap->data[0];
+    heap->data[0] = heap->data[--heap->size];
+    int i = 0;
+    while (2 * i + 1 < heap->size) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = left;
+        if (right < heap->size && compareFree(heap->data[right], heap->data[left]) < 0) {
+            smallest = right;
+        }
+        if (compareFree(heap->data[smallest], heap->data[i]) < 0) {
+            swap(&heap->data[i], &heap->data[smallest]);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+    return top;
+}
+
+// Push to Busy Heap
+void pushBusy(MinHeap* heap, Server s) {
+    heap->data[heap->size] = s;
+    int i = heap->size++;
+    while (i > 0) {
+        int p = (i - 1) / 2;
+        if (compareBusy(heap->data[i], heap->data[p]) < 0) {
+            swap(&heap->data[i], &heap->data[p]);
+            i = p;
+        } else {
+            break;
+        }
+    }
+}
+
+// Pop from Busy Heap
+Server popBusy(MinHeap* heap) {
+    Server top = heap->data[0];
+    heap->data[0] = heap->data[--heap->size];
+    int i = 0;
+    while (2 * i + 1 < heap->size) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = left;
+        if (right < heap->size && compareBusy(heap->data[right], heap->data[left]) < 0) {
+            smallest = right;
+        }
+        if (compareBusy(heap->data[smallest], heap->data[i]) < 0) {
+            swap(&heap->data[i], &heap->data[smallest]);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+    return top;
+}
+
+/**
+ * Note: The returned array must be uniquely allocated using malloc.
+ * The size of the returned array is returned via the returnSize pointer.
+ */
+int* assignTasks(int* servers, int serversSize, int* tasks, int tasksSize, int* returnSize) {
+    MinHeap* freeHeap = createHeap(serversSize);
+    MinHeap* busyHeap = createHeap(serversSize);
+    
+    // Initially, all servers are free
+    for (int i = 0; i < serversSize; i++) {
+        Server s = {servers[i], i, 0};
+        pushFree(freeHeap, s);
+    }
+    
+    int* ans = (int*)malloc(sizeof(int) * tasksSize);
+    *returnSize = tasksSize;
+    
+    long long currentTime = 0;
+    
+    for (int j = 0; j < tasksSize; j++) {
+        // Current time cannot be behind the arrival second of the j-th task
+        if (currentTime < j) {
+            currentTime = j;
+        }
+        
+        // If there are no free servers, fast-forward time to when the first busy server releases
+        if (freeHeap->size == 0 && busyHeap->size > 0) {
+            currentTime = busyHeap->data[0].freeTime;
+        }
+        
+        // Release all servers that finish their tasks at or before currentTime
+        while (busyHeap->size > 0 && busyHeap->data[0].freeTime <= currentTime) {
+            Server s = popBusy(busyHeap);
+            pushFree(freeHeap, s);
+        }
+        
+        // Pick the best available free server
+        Server bestServer = popFree(freeHeap);
+        ans[j] = bestServer.index;
+        
+        // Assign the task to this server and push to busy heap
+        bestServer.freeTime = currentTime + tasks[j];
+        pushBusy(busyHeap, bestServer);
+    }
+    
+    // Clean up allocated heap memory
+    free(freeHeap->data);
+    free(freeHeap);
+    free(busyHeap->data);
+    free(busyHeap);
+    
+    return ans;
+}
