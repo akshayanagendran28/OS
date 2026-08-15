@@ -1,0 +1,35 @@
+#include <mutex>
+#include <functional>
+
+class DiningPhilosophers {
+private:
+    // A single global mutex to serialize fork-manipulation actions safely
+    std::mutex tableMutex;
+
+public:
+    DiningPhilosophers() {
+        
+    }
+
+    void wantsToEat(int philosopher,
+                    std::function<void()> pickLeftFork,
+                    std::function<void()> pickRightFork,
+                    std::function<void()> eat,
+                    std::function<void()> putLeftFork,
+                    std::function<void()> putRightFork) {
+        
+        // Critical Section: A philosopher takes complete control of the table actions
+        std::lock_guard<std::mutex> lock(tableMutex);
+        
+        // Pick up both forks sequentially
+        pickLeftFork();
+        pickRightFork();
+        
+        // Process eating action
+        eat();
+        
+        // Put down both forks sequentially while still holding the table state lock
+        putLeftFork();
+        putRightFork();
+    }
+};
