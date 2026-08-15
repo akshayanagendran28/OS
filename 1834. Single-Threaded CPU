@@ -1,0 +1,144 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+// Structure to store task details along with its original index
+typedef struct {
+    int enqueueTime;
+    int processingTime;
+    int index;
+} Task;
+
+// Structure for the Min-Heap
+typedef struct {
+    Task* data;
+    int size;
+    int capacity;
+} MinHeap;
+
+// Comparison function to sort tasks by enqueueTime
+int compareTasks(const void* a, const void* b) {
+    Task* t1 = (Task*)a;
+    Task* t2 = (Task*)b;
+    if (t1->enqueueTime != t2->enqueueTime) {
+        return (t1->enqueueTime > t2->enqueueTime) - (t1->enqueueTime < t2->enqueueTime);
+    }
+    return t1->index - t2->index;
+}
+
+// Function to initialize the Min-Heap
+MinHeap* createMinHeap(int capacity) {
+    MinHeap* heap = (MinHeap*)malloc(sizeof(MinHeap));
+    heap->data = (Task*)malloc(sizeof(Task) * capacity);
+    heap->size = 0;
+    heap->capacity = capacity;
+    return heap;
+}
+
+// Helper to swap two tasks in the heap
+void swap(Task* a, Task* b) {
+    Task temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+// Push a task into the Min-Heap
+void pushHeap(MinHeap* heap, Task task) {
+    heap->data[heap->size] = task;
+    int i = heap->size;
+    heap->size++;
+    
+    // Bubble up
+    while (i > 0) {
+        int parent = (i - 1) / 2;
+        // Condition: Prioritize smaller processingTime, then smaller index
+        if (heap->data[i].processingTime < heap->data[parent].processingTime ||
+            (heap->data[i].processingTime == heap->data[parent].processingTime && heap->data[i].index < heap->data[parent].index)) {
+            swap(&heap->data[i], &heap->data[parent]);
+            i = parent;
+        } else {
+            break;
+        }
+    }
+}
+
+// Pop the top task from the Min-Heap
+Task popHeap(MinHeap* heap) {
+    Task top = heap->data[0];
+    heap->size--;
+    heap->data[0] = heap->data[heap->size];
+    
+    int i = 0;
+    // Bubble down
+    while (2 * i + 1 < heap->size) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = left;
+        
+        if (right < heap->size) {
+            if (heap->data[right].processingTime < heap->data[left].processingTime ||
+                (heap->data[right].processingTime == heap->data[left].processingTime && heap->data[right].index < heap->data[left].index)) {
+                smallest = right;
+            }
+        }
+        
+        if (heap->data[smallest].processingTime < heap->data[i].processingTime ||
+            (heap->data[smallest].processingTime == heap->data[i].processingTime && heap->data[smallest].index < heap->data[i].index)) {
+            swap(&heap->data[i], &heap->data[smallest]);
+            i = smallest;
+        } else {
+            break;
+        }
+    }
+    return top;
+}
+
+/**
+ * Note: The returned array must be uniquely allocated using malloc.
+ * The size of the returned array is returned via the returnSize pointer.
+ */
+int* getOrder(int** tasks, int tasksSize, int* tasksColSize, int* returnSize) {
+    // Array to store tasks with their original indices
+    Task* extendedTasks = (Task*)malloc(sizeof(Task) * tasksSize);
+    for (int i = 0; i < tasksSize; i++) {
+        extendedTasks[i].enqueueTime = tasks[i][0];
+        extendedTasks[i].processingTime = tasks[i][1];
+        extendedTasks[i].index = i;
+    }
+    
+    // Sort tasks primarily by enqueueTime
+    qsort(extendedTasks, tasksSize, sizeof(Task), compareTasks);
+    
+    MinHeap* heap = createMinHeap(tasksSize);
+    int* result = (int*)malloc(sizeof(int) * tasksSize);
+    *returnSize = tasksSize;
+    
+    long long currentTime = 0;
+    int taskIdx = 0;
+    int resultIdx = 0;
+    
+    // Simulation Loop
+    while (taskIdx < tasksSize || heap->size > 0) {
+        // If the heap is empty and current time is behind the next available task
+        if (heap->size == 0 && currentTime < extendedTasks[taskIdx].enqueueTime) {
+            currentTime = extendedTasks[taskIdx].enqueueTime;
+        }
+        
+        // Push all tasks that have arrived by the current time into the heap
+        while (taskIdx < tasksSize && extendedTasks[taskIdx].enqueueTime <= currentTime) {
+            pushHeap(heap, extendedTasks[taskIdx]);
+            taskIdx++;
+        }
+        
+        // Process the shortest task available
+        Task currentTask = popHeap(heap);
+        result[resultIdx++] = currentTask.index;
+        currentTime += currentTask.processingTime;
+    }
+    
+    // Clean up allocated memory
+    free(extendedTasks);
+    free(heap->data);
+    free(heap);
+    
+    return result;
+}
